@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C1216">
+<title>Ionsikoly</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one-column cockpit panel — gauge, scope, thrust control, engine choice, telemetry. Single dark look by choice. */
+:root{
+  --bg:#0C1216;
+  --panel:#141C21;
+  --line:#23303A;
+  --fg:#DCE6EB;
+  --muted:#8497A2;
+  --ion:#7CC4FF;
+  --heat:#FF9D57;
+  --display:"Saira Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+html,body{background:var(--bg);color:var(--fg)}
+body{margin:0;font-family:var(--body);font-size:16px;line-height:1.45;overscroll-behavior-y:none}
+.wrap{max-width:520px;margin:0 auto;padding-top:max(20px,env(safe-area-inset-top,0px));padding-bottom:max(40px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:800;font-size:2.4rem;line-height:1;letter-spacing:.02em;margin:0;text-transform:uppercase}
+.sub{margin:6px 0 0;color:var(--muted);font-size:.95rem;text-wrap:balance}
+.chip{flex:none;font-family:var(--display);font-weight:700;font-size:.85rem;letter-spacing:.12em;text-transform:uppercase;padding:5px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+.chip.on{color:var(--bg);background:var(--ion);border-color:var(--ion)}
+
+.cluster{position:relative;width:min(78vw,300px);aspect-ratio:1;max-width:100%;margin:0 auto}
+.cluster svg{width:100%;height:100%;display:block}
+.track{fill:none;stroke:var(--line);stroke-width:14;stroke-linecap:round}
+.val{fill:none;stroke:var(--ion);stroke-width:14;stroke-linecap:round}
+.tick{stroke:var(--muted);stroke-width:2}
+.tlabel{fill:var(--muted);font-family:var(--display);font-size:13px;font-weight:500}
+.readout{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:none}
+.kmh{font-family:var(--display);font-weight:800;font-size:4.4rem;line-height:.9;font-variant-numeric:tabular-nums}
+.unit{font-family:var(--display);color:var(--muted);letter-spacing:.14em;font-size:.9rem}
+.thr{margin-top:10px;font-family:var(--display);letter-spacing:.14em;font-size:.85rem;color:var(--muted)}
+.thr b{color:var(--fg);font-variant-numeric:tabular-nums;font-size:1.05rem}
+
+#scope{width:100%;height:56px;display:block;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:focus-visible,.seg input:focus-visible+span,input[type=range]:focus-visible{outline:2px solid var(--ion);outline-offset:3px}
+.thrustrow{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:10px}
+.thrust{width:100%;min-height:92px;border-radius:18px;border:1px solid color-mix(in oklab,var(--ion) 45%,var(--line));background:radial-gradient(120% 140% at 50% 120%,color-mix(in oklab,var(--ion) 22%,var(--panel)),var(--panel));font-family:var(--display);font-weight:700;font-size:1.35rem;letter-spacing:.1em;text-transform:uppercase;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .08s,background .15s}
+.thrust small,.latch small{display:block;font-family:var(--body);font-weight:400;font-size:.85rem;letter-spacing:0;text-transform:none;color:var(--muted);margin-top:4px}
+.thrust.held{transform:scale(.985);background:radial-gradient(120% 140% at 50% 110%,color-mix(in oklab,var(--heat) 40%,var(--panel)),var(--panel));border-color:var(--heat)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--panel);font-weight:700;padding:8px 10px}
+.btn.primary{background:var(--ion);color:var(--bg);border-color:var(--ion)}
+.btn.primary.stop{background:transparent;color:var(--fg);border-color:var(--line)}
+.btn.latch{min-height:92px;border-radius:18px;font-family:var(--display);font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase}
+.btn[aria-pressed="true"]{border-color:var(--ion);background:color-mix(in oklab,var(--ion) 24%,var(--panel))}
+.btn:disabled{opacity:.4;cursor:default}
+
+.settings{display:flex;flex-direction:column;gap:16px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend,.lbl{font-family:var(--display);font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;padding:0}
+.lbl{display:flex;justify-content:space-between;gap:8px}
+.lbl output{color:var(--fg);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.seg label{position:relative;display:block}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:11px 6px;font-weight:700;line-height:1.2;color:var(--muted)}
+.seg label+label span{border-left:1px solid var(--line)}
+.seg input:checked+span{background:color-mix(in oklab,var(--ion) 18%,var(--panel));color:var(--fg)}
+.note{margin:8px 0 0;color:var(--muted);font-size:.92rem;max-width:65ch}
+.vol{display:flex;flex-direction:column}
+input[type=range]{width:100%;accent-color:var(--ion)}
+.check{display:flex;gap:10px;align-items:center}
+.check input{width:20px;height:20px;accent-color:var(--ion);flex:none}
+.status{margin:0;min-height:1.4em;color:var(--muted);font-size:.92rem}
+.status.warn{color:var(--heat)}
+
+.telem{border-top:1px solid var(--line);padding-top:14px;display:grid;grid-template-columns:112px 1fr;gap:16px;align-items:center}
+.telem h2{grid-column:1/-1;margin:0}
+#gball{width:112px;height:112px;display:block}
+.tgrid{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;min-width:0}
+.tgrid dt{font-family:var(--display);font-size:.75rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.tgrid dd{margin:0;font-family:var(--display);font-weight:700;font-size:1.3rem;font-variant-numeric:tabular-nums}
+.telem .btn{grid-column:1/-1}
+
+h2{font-family:var(--display);font-weight:700;font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;margin:0 0 8px}
+.howto{border-top:1px solid var(--line);padding-top:14px}
+.howto ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px;max-width:65ch}
+.howto p{margin:10px 0 0;color:var(--muted);font-size:.92rem;max-width:65ch}
+@media (prefers-reduced-motion:reduce){.thrust{transition:none}}
+</style>
+</head>
+<body>
+
+<main class="wrap">
+  <header class="top">
+    <div>
+      <h1>Ionsikoly</h1>
+      <p class="sub">Szintetizált űrhajtómű-hang, ami a gázpedálodat követi</p>
+    </div>
+    <span class="chip" id="chip">Áll</span>
+  </header>
+
+  <section class="cluster" aria-label="Sebesség és tolóerő">
+    <svg viewBox="0 0 220 220" aria-hidden="true">
+      <circle class="track" cx="110" cy="110" r="90" stroke-dasharray="424.12 565.49" transform="rotate(135 110 110)"/>
+      <circle class="val" id="arc" cx="110" cy="110" r="90" stroke-dasharray="0 565.49" transform="rotate(135 110 110)"/>
+      <g id="ticks"></g>
+    </svg>
+    <div class="readout">
+      <span class="kmh" id="kmh">0</span>
+      <span class="unit">KM/H</span>
+      <span class="thr">TOLÓERŐ <b id="pct">0</b>%</span>
+    </div>
+  </section>
+
+  <canvas id="scope" aria-hidden="true"></canvas>
+
+  <div class="thrustrow">
+    <button class="thrust" id="thrust" type="button">Tolóerő<small>Tartsd nyomva — elengedve lecseng</small></button>
+    <button class="btn latch" id="latch" type="button" aria-pressed="false">Tartás<small>sebesség</small></button>
+  </div>
+
+  <div class="row2">
+    <button class="btn primary" id="power" type="button">Hajtómű indítása</button>
+    <button class="btn" id="fly" type="button">Átrepülés</button>
+  </div>
+
+  <div class="settings">
+    <fieldset>
+      <legend>Hajtómű</legend>
+      <div class="seg">
+        <label><input type="radio" name="preset" id="preset-tie" value="tie"><span>TIE vadász</span></label>
+        <label><input type="radio" name="preset" id="preset-pod" value="pod"><span>Sebulba fogat</span></label>
+        <label><input type="radio" name="preset" id="preset-jet" value="jet"><span>Ionhajtómű</span></label>
+      </div>
+      <p class="note" id="presetNote"></p>
+    </fieldset>
+    <fieldset>
+      <legend>Vezérlés</legend>
+      <div class="seg">
+        <label><input type="radio" name="mode" id="mode-manual" value="manual" checked><span>Kézi</span></label>
+        <label><input type="radio" name="mode" id="mode-sensor" value="sensor"><span>Szenzor (GPS + G)</span></label>
+      </div>
+    </fieldset>
+    <label class="vol" for="sens"><span class="lbl">Teljes tolóerő ennyi G-nél <output id="sensOut">0,45 g</output></span><input type="range" id="sens" min="10" max="80" value="45"></label>
+    <label class="vol" for="vol"><span class="lbl">Hangerő <output id="volOut">70%</output></span><input type="range" id="vol" min="0" max="100" value="70"></label>
+    <label class="check" for="autofly"><input type="checkbox" id="autofly" checked> Átrepülés erős gyorsításnál (szenzor módban)</label>
+    <p class="status" id="status" role="status">Kézi mód: nyomd a Tolóerő gombot.</p>
+  </div>
+
+  <section class="telem" aria-label="Telemetria">
+    <h2>Telemetria</h2>
+    <canvas id="gball" aria-hidden="true"></canvas>
+    <dl class="tgrid">
+      <div><dt>GPS</dt><dd id="tGps">—</dd></div>
+      <div><dt>Fúzionált</dt><dd id="tFused">—</dd></div>
+      <div><dt>Hosszirányú</dt><dd id="tLong">—</dd></div>
+      <div><dt>Előre-irány</dt><dd id="tFwd">0%</dd></div>
+    </dl>
+    <button class="btn" id="teach" type="button">Irány tanítása: nyomd meg, majd gyorsíts egyenesen</button>
+  </section>
+
+  <section class="howto">
+    <h2>Autóban</h2>
+    <ol>
+      <li>Nyisd meg az oldalt https-címről a telefon böngészőjében. A claude.ai előnézet letiltja a GPS-t és a G-mérőt, ott csak a kézi mód működik.</li>
+      <li>Rögzítsd a telefont fixen tartóban, a hang menjen Bluetooth-on az autó hangszóróira.</li>
+      <li>Válaszd a Szenzor módot, indítsd a hajtóművet, engedélyezd a helyet.</li>
+      <li>Az első néhány gyorsításnál magától megtanulja, merre van előre. Gyorsabb, ha megnyomod az Irány tanítása gombot, és 4 másodpercig egyenesen gyorsítasz.</li>
+      <li>Erős villanyautóban állítsd a „Teljes tolóerő” csúszkát 0,6 g fölé, különben minden gyorsítás maximumon szól.</li>
+    </ol>
+    <p>A G-mérő másodpercenként kb. 60-szor méri a gyorsulást, így a hang azonnal reagál a gázra. A GPS másodpercenként egyszer ad sebességet, ezzel javítja ki a G-mérő sodródását. Ha a telefon elmozdul a tartóban, az oldal észreveszi és újratanulja az irányt. A böngésző maradjon előtérben: háttérben a hang elnémul. Indulás előtt állítsd be, vezetés közben ne kezeld.</p>
+  </section>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  function clamp(v,a,b){ a = a==null?0:a; b = b==null?1:b; return Math.max(a, Math.min(b, v)); }
+  function lerp(a,b,t){ return a+(b-a)*t; }
+  function smooth(x){ x = clamp(x); return x*x*(3-2*x); }
+  function dot3(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+  function len3(a){ return Math.sqrt(dot3(a,a)); }
+  function sc3(a,k){ return [a[0]*k,a[1]*k,a[2]*k]; }
+  function sub3(a,b){ return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; }
+  function nrm3(a){ var l = len3(a); return l>1e-9 ? sc3(a,1/l) : [0,0,0]; }
+  function crs3(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+  function lp3(s,x,dt,tau){ var k = 1-Math.exp(-dt/tau); for (var i=0;i<3;i++) s[i] += (x[i]-s[i])*k; }
+  function vec3(a){ return Array.isArray(a) && a.length === 3 && a.every(function(x){ return typeof x === "number" && isFinite(x); }); }
+  function hu(n,d){ return n.toFixed(d).replace(".",","); }
+
+  var G0 = 9.81, VMAX = 130;
+  var NOTES = {
+    tie: "Klasszikus TIE vadász: éles, modulált sikoly, magas formánsok, agresszív üvöltés padlógáznál.",
+    pod: "Sebulba fogat: nyers, egyenetlen ikerhajtómű. Sebességtartásnál lüktető woob-woob, gázelvételnél visszagyulladás és durrogás.",
+    jet: "Modern sci-fi ionhajtómű: mély plazma-dübörgés + tiszta magas sípolás, utazósebességnél lassú reaktor-lebegés."
+  };
+
+  /* t = thrust, s = speed, b = braking, c = cruise (holding speed) — all 0..1, smoothed */
+  var st = { mode:"manual", preset:"tie", vol:0.7, sens:0.45, autoFly:true, running:false, hold:false, latch:false,
+             t:0, s:0, b:0, c:0, simS:0, flyAt:-1, lastAutoFly:0 };
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem("ionsikoly2") || "{}") || {}; } catch(e) {}
+  if (saved.preset && NOTES[saved.preset]) st.preset = saved.preset;
+  if (typeof saved.vol === "number") st.vol = clamp(saved.vol);
+  if (typeof saved.sens === "number") st.sens = clamp(saved.sens, 0.1, 0.8);
+  if (typeof saved.autoFly === "boolean") st.autoFly = saved.autoFly;
+  function save(){
+    try { localStorage.setItem("ionsikoly2", JSON.stringify({ preset:st.preset, vol:st.vol, sens:st.sens, autoFly:st.autoFly,
+      fwd:Fu.fwd, fwdW:Fu.fwdW, gRef:Fu.gRef, latCorr:Fu.latCorr })); } catch(e) {}
+  }
+
+  /* =================== Audio core =================== */
+  var A = null;
+  function shaperCurve(k){
+    var n = 2048, c = new Float32Array(n);
+    for (var i=0;i<n;i++){ var x = i/(n-1)*2-1; c[i] = (1+k)*x/(1+k*Math.abs(x)); }
+    return c;
+  }
+  function makeNoise(ctx, kind){
+    var len = ctx.sampleRate*2, buf = ctx.createBuffer(1,len,ctx.sampleRate), d = buf.getChannelData(0);
+    var last = 0, b0 = 0, b1 = 0, b2 = 0;
+    for (var i=0;i<len;i++){
+      var w = Math.random()*2-1;
+      if (kind === "brown") { last = (last + 0.02*w)/1.02; d[i] = last*3.5; }
+      else if (kind === "pink") { b0 = 0.99765*b0 + w*0.0990460; b1 = 0.96300*b1 + w*0.2965164; b2 = 0.57000*b2 + w*1.0526913; d[i] = (b0+b1+b2+w*0.1848)*0.18; }
+      else d[i] = w;
+    }
+    return buf;
+  }
+  function chain(){ for (var i=0;i<arguments.length-1;i++) arguments[i].connect(arguments[i+1]); return arguments[arguments.length-1]; }
+
+  function rig(level){   // level = per-engine trim, so switching engines does not jump in loudness
+    var ctx = A.ctx, bus = ctx.createGain(), started = [];
+    bus.gain.value = 0; bus.connect(A.master);
+    bus.gain.setTargetAtTime(level || 1, ctx.currentTime, 0.15);
+    return {
+      ctx: ctx, bus: bus,
+      osc: function(type,f){ var o = ctx.createOscillator(); o.type = type; o.frequency.value = f; started.push(o); return o; },
+      noise: function(kind){ var s = ctx.createBufferSource(); s.buffer = A.noise[kind]; s.loop = true; started.push(s); return s; },
+      gain: function(v){ var g = ctx.createGain(); g.gain.value = v; return g; },
+      filt: function(type,f,q){ var b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q != null) b.Q.value = q; return b; },
+      shaper: function(k){ var w = ctx.createWaveShaper(); w.curve = shaperCurve(k); w.oversample = "2x"; return w; },
+      panner: function(v){ if (!ctx.createStereoPanner) return ctx.createGain(); var p = ctx.createStereoPanner(); p.pan.value = v; return p; },
+      set: function(param,v,tc){ param.setTargetAtTime(v, ctx.currentTime, tc || 0.05); },
+      go: function(){ started.forEach(function(n){ if (n.buffer) n.start(0, Math.random()*1.8); else n.start(); }); },
+      stop: function(){
+        var t = ctx.currentTime; bus.gain.cancelScheduledValues(t); bus.gain.setTargetAtTime(0, t, 0.08);
+        setTimeout(function(){ started.forEach(function(n){ try { n.stop(); } catch(e) {} }); try { bus.disconnect(); } catch(e) {} }, 700);
+      }
+    };
+  }
+
+  var ENGINES = {};
+
+  /* TIE Fighter – éles, modulált, magas formánsú sikoly, jellegzetes üvöltés */
+  ENGINES.tie = function(){
+    var R = rig(3);
+    // Core scream oscillators (detuned for thickness)
+    var o1 = R.osc("sawtooth", 110), o2 = R.osc("sawtooth", 110.7), o3 = R.osc("square", 55);
+    var vmix = R.gain(0.28);
+    o1.connect(vmix); o2.connect(vmix);
+    chain(o3, R.gain(0.22), vmix);
+
+    // Heavy pitch jitter + slow vibrato (classic TIE instability)
+    var jit = R.noise("brown"), jitG = R.gain(95);
+    chain(jit, R.filt("lowpass", 22), jitG);
+    var vib = R.osc("sine", 6.8), vibG = R.gain(18);
+    vib.connect(vibG);
+    [o1, o2, o3].forEach(function(o){ jitG.connect(o.detune); vibG.connect(o.detune); });
+
+    // Amplitude growl
+    var vca = R.gain(0.65), growl = R.osc("sine", 38), growlG = R.gain(0.38);
+    growl.connect(growlG); growlG.connect(vca.gain);
+
+    var drive = R.shaper(7);
+    chain(vmix, vca, drive);
+
+    // Formant filters – higher and sharper for that piercing TIE character
+    var F = [
+      R.filt("bandpass", 780, 7.5),
+      R.filt("bandpass", 1650, 9),
+      R.filt("bandpass", 3100, 11)
+    ];
+    var FG = [R.gain(1.1), R.gain(0.85), R.gain(0.55)], voice = R.gain(0);
+    F.forEach(function(f, i){ drive.connect(f); f.connect(FG[i]); FG[i].connect(voice); });
+    voice.connect(R.bus);
+
+    // High hiss / air scream
+    var hp = R.filt("highpass", 3200, 0.8), bp = R.filt("bandpass", 5200, 1.4), swG = R.gain(0);
+    var sw = R.osc("sine", 0.85), swD = R.gain(0);
+    sw.connect(swD); swD.connect(swG.gain);
+    chain(R.noise("white"), hp, bp, swG, R.bus);
+
+    // Low body rumble
+    var lp = R.filt("lowpass", 160, 0.9), rG = R.gain(0);
+    chain(R.noise("brown"), lp, rG, R.bus);
+
+    R.go();
+    return { stop: R.stop, update: function(p){
+      var s = p.s, t = p.t, b = p.boost;
+      var f = (95 + 310 * s + 110 * t) * p.pitch;
+      R.set(o1.frequency, f);
+      R.set(o2.frequency, f * 1.007);
+      R.set(o3.frequency, f * 0.5);
+
+      var mix = clamp(0.5 * s + 0.5 * t + 0.45 * b);
+      R.set(F[0].frequency, lerp(620, 1050, mix) * p.pitch);
+      R.set(F[1].frequency, lerp(1400, 2600, mix) * (0.85 + 0.15 * p.pitch));
+      R.set(F[2].frequency, lerp(2800, 4200, mix));
+
+      R.set(growl.frequency, 28 + 38 * s + 22 * t);
+      R.set(growlG.gain, 0.18 + 0.32 * t + 0.28 * b);
+      R.set(voice.gain, 0.07 + 0.42 * t + 0.18 * s + 0.55 * b);
+
+      R.set(sw.frequency, 0.6 + 3.2 * s);
+      R.set(swG.gain, 0.01 + 0.07 * s + 0.12 * b);
+      R.set(swD.gain, 0.045 * s);
+      R.set(bp.frequency, 3800 + 4800 * s);
+
+      R.set(rG.gain, 0.12 + 0.38 * t + 0.08 * s + 0.3 * b);
+      R.set(lp.frequency, 130 + 750 * t + 550 * b);
+    }};
+  };
+
+  /* Sebulba podracer – nyers, egyenetlen, mechanikus, visszagyulladásos; sebességtartásnál lüktet (woob-woob) */
+  ENGINES.pod = function(){
+    var R = rig(0.75), rpm = 0.12, popAcc = 0;
+
+    // Cruise throb: one shared LFO pulses level, filter cutoff and pitch together -> "woob-woob".
+    // The soft-squared sine gives each pulse a quick swell, a held "oo" and a quick close.
+    var wob = R.osc("sine", 4), wobS = R.shaper(2.5);
+    wob.connect(wobS);
+    var wobDet = R.gain(0), wobTrem = R.gain(0);
+    wobS.connect(wobDet); wobS.connect(wobTrem);
+
+    function side(panV, det){
+      var o = R.osc("sawtooth", 42), rm = R.osc("square", 68), ring = R.gain(0);
+      o.connect(ring); rm.connect(ring.gain);
+      var sum = R.gain(1);
+      ring.connect(sum);
+      chain(o, R.gain(0.55), sum);
+
+      // Extra roughness
+      var rough = R.osc("sawtooth", 38), roughG = R.gain(0.25);
+      chain(rough, roughG, sum);
+
+      var lp = R.filt("lowpass", 1400, 1.4), g = R.gain(0), pn = R.panner(panV);
+      chain(sum, R.shaper(18), lp, g, pn, R.bus);
+
+      var wh = R.osc("triangle", 980), whG = R.gain(0);
+      chain(wh, whG, pn);
+
+      // The throb bends the engine pitch and pumps its level
+      [o, rm, rough].forEach(function(x){ wobDet.connect(x.detune); });
+      wobTrem.connect(g.gain);
+
+      return { o: o, rm: rm, rough: rough, lp: lp, g: g, wh: wh, whG: whG, det: det };
+    }
+
+    var sides = [side(-0.72, 1), side(0.72, 1.023)];
+
+    // Throb voice: resonant low-pass sweeping over a saw + sub-octave square
+    var wo = R.osc("sawtooth", 84), wsub = R.osc("square", 42), wmix = R.gain(0.5);
+    wo.connect(wmix); chain(wsub, R.gain(0.6), wmix);
+    wobDet.connect(wo.detune); wobDet.connect(wsub.detune);
+    var wlp = R.filt("lowpass", 260, 3.5), wv = R.gain(0), wobCut = R.gain(0), wobAmp = R.gain(0);
+    wobS.connect(wobCut); wobCut.connect(wlp.frequency);
+    wobS.connect(wobAmp); wobAmp.connect(wv.gain);
+    chain(wmix, R.shaper(5), wlp, wv, R.bus);
+
+    // Mechanical clatter / chain noise
+    var clatter = R.noise("pink"), clLp = R.filt("bandpass", 900, 2.5), clG = R.gain(0);
+    chain(clatter, clLp, clG, R.bus);
+
+    // Exhaust
+    var jlp = R.filt("lowpass", 550, 0.75), jg = R.gain(0);
+    chain(R.noise("pink"), jlp, jg, R.bus);
+
+    R.go();
+
+    function pop(){
+      var c = R.ctx, n = c.createBufferSource();
+      n.buffer = A.noise.white;
+      var bp = R.filt("bandpass", 220 + Math.random() * 1600, 1.8);
+      var g = c.createGain(), pn = R.panner(Math.random() * 1.7 - 0.85);
+      var t0 = c.currentTime + Math.random() * 0.025;
+      var amp = 0.45 + Math.random() * 0.55;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(amp, t0 + 0.0015);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05 + Math.random() * 0.09);
+      chain(n, bp, g, pn, R.bus);
+      n.start(t0, Math.random() * 1.5, 0.18);
+      n.onended = function(){ try { pn.disconnect(); } catch(e){} };
+    }
+
+    return { stop: R.stop, update: function(p, dt){
+      var target = 0.15 + 0.52 * p.s + 0.42 * p.t + 0.32 * p.boost;
+      var prev = rpm;
+      rpm += (target - rpm) * (1 - Math.exp(-dt / (target > rpm ? 0.28 : 0.85)));
+
+      var f = (32 + 165 * rpm) * p.pitch;
+      var sideG = 0.14 + 0.34 * rpm + 0.22 * p.t + 0.35 * p.boost;
+
+      sides.forEach(function(e){
+        R.set(e.o.frequency, f * e.det);
+        R.set(e.rm.frequency, f * e.det * 1.48);
+        R.set(e.rough.frequency, f * e.det * 0.92);
+        R.set(e.lp.frequency, 420 + 3600 * rpm + 1800 * p.t);
+        R.set(e.g.gain, sideG);
+        R.set(e.wh.frequency, (850 + 4100 * rpm) * e.det * p.pitch);
+        R.set(e.whG.gain, 0.008 + 0.032 * rpm);
+      });
+
+      // Throb: tempo follows road speed, depth follows how steadily the speed is held
+      var c = p.c, cut = 190 + 230 * rpm, wa = (0.13 + 0.17 * rpm) * c;
+      R.set(wob.frequency, 3 + 2.6 * p.s, 0.25);
+      R.set(wobTrem.gain, 0.42 * sideG * c, 0.12);
+      R.set(wobDet.gain, 26 * c, 0.12);
+      R.set(wo.frequency, f);
+      R.set(wsub.frequency, f * 0.5);
+      R.set(wlp.frequency, cut);
+      R.set(wobCut.gain, cut * 0.6);
+      R.set(wv.gain, wa, 0.12);
+      R.set(wobAmp.gain, wa * 0.95, 0.12);
+
+      // Clatter increases with load
+      R.set(clLp.frequency, 700 + 900 * rpm);
+      R.set(clG.gain, 0.04 + 0.18 * rpm + 0.12 * p.t);
+
+      R.set(jlp.frequency, 280 + 2700 * p.t + 1600 * p.boost);
+      R.set(jg.gain, 0.06 + 0.38 * p.t + 0.22 * p.boost);
+
+      // Backfires on lift-off / sudden unload — only on a real lift, not on cruise jitter
+      var fall = (prev - rpm) / Math.max(dt, 0.001);
+      var lift = clamp(clamp((p.b - 0.1) / 0.3) + clamp((fall - 0.04) / 0.2));
+      if (lift > 0 && rpm > 0.32 && st.running) {
+        popAcc += dt * (8 + 28 * rpm) * lift;
+        while (popAcc > 1) {
+          if (Math.random() < 0.85) pop();
+          popAcc -= 1;
+        }
+      } else {
+        popAcc = 0;
+      }
+    }};
+  };
+
+  /* Modern sci-fi ion / plasma drive – deep thrum + clean high plasma, powerful & refined */
+  ENGINES.jet = function(){
+    var R = rig(), rpm = 0.08, ab = 0;
+
+    // Deep ion thrum (layered)
+    var thrum1 = R.osc("sine", 48), thrum2 = R.osc("sine", 72), thrum3 = R.osc("triangle", 36);
+    var thrumG = R.gain(0);
+    chain(thrum1, R.gain(0.7), thrumG);
+    chain(thrum2, R.gain(0.45), thrumG);
+    chain(thrum3, R.gain(0.35), thrumG);
+    thrumG.connect(R.bus);
+
+    // Cruise: a slightly detuned twin makes the thrum beat slowly, like a reactor at steady load
+    var thrumB = R.osc("sine", 49), thrumBG = R.gain(0);
+    chain(thrumB, thrumBG, thrumG);
+
+    // High plasma whistle (clean, rising)
+    var plasma = R.osc("sine", 1800), plasma2 = R.osc("sine", 2700), plasmaG = R.gain(0);
+    plasma.connect(plasmaG);
+    chain(plasma2, R.gain(0.4), plasmaG);
+    var plasmaFilt = R.filt("bandpass", 2200, 4.5);
+    chain(plasmaG, plasmaFilt, R.bus);
+
+    // Subtle harmonic shimmer
+    var shim = R.osc("triangle", 3600), shimG = R.gain(0);
+    chain(shim, R.filt("highpass", 2800), shimG, R.bus);
+
+    // Soft noise bed (plasma hiss)
+    var hiss = R.filt("highpass", 1800, 0.7), hissG = R.gain(0);
+    chain(R.noise("white"), hiss, hissG, R.bus);
+
+    // Low body
+    var body = R.filt("lowpass", 220, 0.8), bodyG = R.gain(0);
+    chain(R.noise("brown"), body, bodyG, R.bus);
+
+    // Afterburner / overload layer
+    var abLp = R.filt("lowpass", 700, 1.1), abG = R.gain(0), abMod = R.gain(0);
+    chain(R.noise("pink"), abLp, abG, R.bus);
+    chain(R.noise("brown"), abMod);
+    abMod.connect(abG.gain);
+
+    R.go();
+    return { stop: R.stop, update: function(p, dt){
+      var target = 0.1 + 0.48 * p.s + 0.48 * p.t + 0.28 * p.boost;
+      rpm += (target - rpm) * (1 - Math.exp(-dt / (target > rpm ? 0.95 : 1.8)));
+
+      // Deep thrum rises slowly
+      var base = (42 + 95 * rpm) * p.pitch;
+      R.set(thrum1.frequency, base);
+      R.set(thrum2.frequency, base * 1.5);
+      R.set(thrum3.frequency, base * 0.75);
+      R.set(thrumG.gain, 0.09 + 0.28 * rpm + 0.22 * p.t + 0.25 * p.boost);
+      R.set(thrumB.frequency, base + 0.7 + 0.9 * p.s);
+      R.set(thrumBG.gain, 0.55 * p.c, 0.3);
+
+      // Plasma whistle – clean and high
+      var pf = (1600 + 4800 * rpm) * p.pitch;
+      R.set(plasma.frequency, pf);
+      R.set(plasma2.frequency, pf * 1.5);
+      R.set(plasmaFilt.frequency, pf * 0.9);
+      R.set(plasmaG.gain, 0.015 + 0.09 * rpm + 0.12 * p.boost);
+
+      R.set(shim.frequency, (3200 + 2800 * rpm) * p.pitch);
+      R.set(shimG.gain, 0.008 + 0.035 * rpm);
+
+      R.set(hiss.frequency, 1600 + 2200 * rpm);
+      R.set(hissG.gain, 0.025 + 0.11 * rpm + 0.08 * p.boost);
+
+      R.set(body.frequency, 160 + 480 * rpm + 350 * p.t);
+      R.set(bodyG.gain, 0.08 + 0.22 * rpm + 0.18 * p.t);
+
+      // Overload / afterburner kicks in hard at high throttle
+      var abT = clamp(clamp((p.t - 0.65) / 0.35) * clamp((rpm - 0.55) / 0.3) + p.boost * 0.55);
+      ab += (abT - ab) * (1 - Math.exp(-dt / (abT > ab ? 0.12 : 0.45)));
+      R.set(abG.gain, 0.48 * ab);
+      R.set(abMod.gain, 0.4 * ab);
+      R.set(abLp.frequency, 480 + 2200 * ab);
+    }};
+  };
+
+  function initAudio(){
+    if (A) return A;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { setStatus("Ez a böngésző nem tud hangot szintetizálni.", true); return null; }
+    // iPhone: play as media, so the ring/silent switch does not mute the engine
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch(e) {}
+    var ctx;
+    try { ctx = new AC({ latencyHint:"interactive" }); } catch(e) { ctx = new AC(); }
+    var master = ctx.createGain(); master.gain.value = 0;
+    var pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    var comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 5; comp.attack.value = 0.005; comp.release.value = 0.2;
+    // Brick-wall-ish limiter so pops and fly-bys cannot clip the car speakers
+    var lim = ctx.createDynamicsCompressor(); lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.08;
+    var analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
+    if (pan) chain(master, pan, comp); else master.connect(comp);
+    chain(comp, lim, analyser, ctx.destination);
+    A = { ctx:ctx, master:master, pan:pan, analyser:analyser, engine:null,
+          noise:{ white:makeNoise(ctx,"white"), pink:makeNoise(ctx,"pink"), brown:makeNoise(ctx,"brown") } };
+    A.engine = ENGINES[st.preset]();
+    return A;
+  }
+  function swapEngine(){ if (!A) return; A.engine.stop(); A.engine = ENGINES[st.preset](); }
+  function wakeAudio(){ if (A && st.running && A.ctx.state !== "running") { try { A.ctx.resume(); } catch(e) {} } }
+
+  function flyShape(){
+    if (!A || st.flyAt < 0) return { pitch:1, boost:0, pan:0 };
+    var p = (A.ctx.currentTime - st.flyAt) / 1.9;
+    if (p >= 1) { st.flyAt = -1; return { pitch:1, boost:0, pan:0 }; }
+    var sm = smooth((p-0.38)/0.24);
+    return { pitch: 1.38 - 0.66*sm, boost: Math.exp(-Math.pow((p-0.48)/0.17, 2)), pan: -0.85 + 1.7*smooth((p-0.2)/0.6) };
+  }
+
+  /* =================== Sensor fusion: GPS speed + accelerometer =================== */
+  var Fu = { geoId:null, motionOn:false, g:null, gu:null, h:[0,0,0], hSum:[0,0,0], hN:0,
+             fwd:[0,0,0], fwdW:0, gRef:null, latCorr:0, tilt:0,
+             v:0, bias:0, aLong:0, aLongS:0, aLat:0, still:0,
+             gpsV:null, gpsA:0, lastFix:null, lastFixAt:0, lastMotion:0, acc:null, teach:null };
+  // A learned forward direction is only valid for the phone pose it was learned in (gRef = gravity then)
+  if (vec3(saved.fwd) && vec3(saved.gRef) && typeof saved.fwdW === "number") {
+    Fu.fwd = saved.fwd.slice(); Fu.fwdW = clamp(saved.fwdW, 0, 12); Fu.gRef = saved.gRef.slice();
+    if (typeof saved.latCorr === "number") Fu.latCorr = clamp(saved.latCorr, -30, 30);
+  }
+  function conf(){ return clamp(Fu.fwdW/6); }
+  function gpsFresh(){ return Fu.gpsV != null && performance.now() - Fu.lastFixAt < 4000; }
+  function imuAlive(){ return Fu.lastMotion > 0 && performance.now() - Fu.lastMotion < 600; }
+  function forgetFwd(){ Fu.fwd = [0,0,0]; Fu.fwdW = 0; Fu.gRef = null; Fu.latCorr = 0; Fu.tilt = 0; }
+  // Forward unit vector, forced into the horizontal plane
+  function fwdUnit(gu){ return nrm3(sub3(Fu.fwd, sc3(gu, dot3(Fu.fwd, gu)))); }
+
+  function hav(a,b){
+    var R = 6371000, r = Math.PI/180, dLat = (b.lat-a.lat)*r, dLon = (b.lon-a.lon)*r;
+    var h = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return 2*R*Math.asin(Math.sqrt(h));
+  }
+
+  /* One fusion step. gu = gravity unit vector, or null when no accelerometer data is coming (GPS-only). */
+  function fuse(dt, gu){
+    var c = gu ? conf() : 0, aImu = 0, lat = 0;
+    if (c > 0) { var fu = fwdUnit(gu); aImu = dot3(Fu.h, fu); lat = dot3(Fu.h, crs3(gu, fu)); }
+    var fresh = gpsFresh(), gA = fresh ? Fu.gpsA : 0;
+    var aRaw = c*(aImu + Fu.bias) + (1-c)*gA;
+    if (fresh && Fu.gpsV < 0.6 && (!gu || len3(Fu.h) < 0.25)) Fu.still += dt; else Fu.still = 0;
+    if (Fu.still > 0.8) { aRaw = 0; Fu.bias *= Math.exp(-dt/2); Fu.v *= Math.exp(-dt/0.3); }   // parked: no phantom thrust
+    Fu.aLong = aRaw;
+    Fu.aLat = lat * c * (Fu.latCorr > 1 ? 1 : -1);   // positive = accelerating to the right
+    Fu.aLongS += (aRaw - Fu.aLongS) * (1 - Math.exp(-dt/0.22));
+    Fu.v = Math.max(0, Fu.v + aRaw*dt);
+    if (!fresh) Fu.v *= Math.exp(-dt/40);
+  }
+
+  function onMotion(e){
+    var ig = e.accelerationIncludingGravity, la = e.acceleration;
+    if (!ig || ig.x == null) return;
+    var now = performance.now(), dt = Fu.lastMotion ? Math.min(0.1, (now - Fu.lastMotion)/1000) : 0.016;
+    Fu.lastMotion = now;
+    var gi = [ig.x, ig.y, ig.z], lin, hasLin = !!(la && la.x != null);
+    if (!Fu.g) Fu.g = gi.slice();
+    if (hasLin) { lp3(Fu.g, [gi[0]-la.x, gi[1]-la.y, gi[2]-la.z], dt, 0.3); lin = [la.x, la.y, la.z]; }
+    else { lp3(Fu.g, gi, dt, 4); lin = sub3(gi, Fu.g); }
+    var gn = len3(Fu.g); if (gn < 4) return;
+    var gu = sc3(Fu.g, 1/gn), h = sub3(lin, sc3(gu, dot3(lin, gu)));
+    Fu.gu = gu;
+    lp3(Fu.h, h, dt, 0.12);
+    for (var i=0;i<3;i++) Fu.hSum[i] += Fu.h[i];
+    Fu.hN++;
+
+    // Phone moved in its mount? Gravity then points elsewhere than when forward was learned.
+    // Only judged in calm moments, so a hard launch can never trigger it.
+    if (hasLin && Fu.fwdW > 0 && Fu.gRef && !Fu.teach) {
+      if (len3(Fu.h) < 1 && dot3(gu, Fu.gRef) < 0.9) {
+        Fu.tilt += dt;
+        if (Fu.tilt > 3) { forgetFwd(); save(); setStatus("A telefon elmozdult a tartóban: újratanulom az előre-irányt.", true); }
+      } else if (len3(Fu.h) < 1) Fu.tilt = 0;
+    }
+
+    if (Fu.teach) {
+      for (var j=0;j<3;j++) Fu.teach.sum[j] += Fu.h[j];
+      Fu.teach.n++;
+      if (now > Fu.teach.until) {
+        var avg = sc3(Fu.teach.sum, 1/Math.max(1, Fu.teach.n));
+        if (len3(avg) > 0.6) { Fu.fwd = sc3(nrm3(avg), 6); Fu.fwdW = 6; Fu.gRef = gu.slice(); Fu.tilt = 0; save(); setStatus("Előre-irány beállítva."); }
+        else setStatus("Túl gyenge volt a gyorsítás. Nyomd meg újra, és gyorsíts erősebben.", true);
+        Fu.teach = null; teachBtn.textContent = "Irány tanítása: nyomd meg, majd gyorsíts egyenesen";
+      }
+    }
+
+    fuse(dt, gu);
+  }
+
+  function onPos(pos){
+    var c = pos.coords, now = pos.timestamp || Date.now(), v = c.speed;
+    if (c.accuracy != null && c.accuracy > 60) {
+      if (!Fu.teach) setStatus("Gyenge GPS-jel (±" + Math.round(c.accuracy) + " m)" + (imuAlive() ? " · a G-mérő viszi tovább" : ""), true);
+      return;
+    }
+    var fix = { lat:c.latitude, lon:c.longitude, t:now, hd:null };
+    if ((v == null || isNaN(v)) && Fu.lastFix) { var d = (now - Fu.lastFix.t)/1000; v = d > 0 ? hav(Fu.lastFix, fix)/d : 0; }
+    if (v == null || isNaN(v)) v = 0;
+    if (c.heading != null && !isNaN(c.heading) && v > 3) fix.hd = c.heading;
+    if (Fu.lastFix && Fu.gpsV != null) {
+      var dtf = (now - Fu.lastFix.t)/1000;
+      if (dtf > 0.3 && dtf < 4) {
+        var aG = clamp((v - Fu.gpsV)/dtf, -9, 9);
+        Fu.gpsA = 0.5*Fu.gpsA + 0.5*aG;
+        var avg = Fu.hN > 5 ? sc3(Fu.hSum, 1/Fu.hN) : null;
+        // Learn forward: the phone-frame direction that lines up with GPS speed change
+        if (avg && v > 2 && Math.abs(aG) > 0.35) {
+          var m = len3(avg);
+          if (m > 0.15 && m < 3*Math.abs(aG) + 1) {
+            var w = Math.min(Math.abs(aG), 3), u = sc3(avg, (aG > 0 ? 1 : -1) * w / m);
+            for (var i=0;i<3;i++) Fu.fwd[i] += u[i];
+            var fl = len3(Fu.fwd); if (fl > 12) Fu.fwd = sc3(Fu.fwd, 12/fl);   // bounded memory: keeps adapting
+            Fu.fwdW = Math.min(12, Fu.fwdW + w*0.5);
+            if (!Fu.gRef && Fu.gu) Fu.gRef = Fu.gu.slice();
+            save();
+          }
+        }
+        // Learn left/right from GPS heading change (a right turn makes the heading grow)
+        if (avg && Fu.gu && conf() > 0.5 && fix.hd != null && Fu.lastFix.hd != null) {
+          var dH = ((fix.hd - Fu.lastFix.hd + 540) % 360) - 180, aR = v * (dH*Math.PI/180) / dtf;
+          if (Math.abs(aR) > 0.8 && Math.abs(aR) < 8) {
+            var latAvg = dot3(avg, crs3(Fu.gu, fwdUnit(Fu.gu)));
+            Fu.latCorr = clamp(Fu.latCorr + clamp(latAvg*aR, -3, 3), -30, 30);
+          }
+        }
+        var err = v - Fu.v;
+        Fu.v += err * (imuAlive() ? 0.35 : 0.7);
+        Fu.bias = clamp(Fu.bias + 0.12*err/Math.max(dtf, 0.5)*conf(), -1.5, 1.5);
+      }
+    } else Fu.v = v;
+    Fu.hSum = [0,0,0]; Fu.hN = 0; Fu.gpsV = v; Fu.lastFix = fix; Fu.lastFixAt = performance.now(); Fu.acc = c.accuracy;
+    if (!Fu.teach) setStatus("GPS rendben · pontosság ±" + Math.round(c.accuracy || 0) + " m" + (imuAlive() ? " · G-mérő aktív" : " · G-mérő nélkül, lassabban reagál"));
+  }
+  function onGeoErr(err){
+    if (err && err.code === 1) setStatus("A helymeghatározás itt nem engedélyezett. Saját https-címen működik; addig a kézi mód megy.", true);
+    else setStatus("Nincs GPS-jel. Szabad ég alatt próbáld, vagy használd a kézi módot.", true);
+  }
+  function startSensors(){
+    if (Fu.geoId == null && "geolocation" in navigator) {
+      try { Fu.geoId = navigator.geolocation.watchPosition(onPos, onGeoErr, { enableHighAccuracy:true, maximumAge:0, timeout:15000 }); }
+      catch(e) { onGeoErr({ code:1 }); }
+    } else if (!("geolocation" in navigator)) setStatus("Ez az eszköz nem ad GPS-adatot.", true);
+    if (!Fu.motionOn && "DeviceMotionEvent" in window) {
+      var add = function(){ if (Fu.motionOn) return; window.addEventListener("devicemotion", onMotion); Fu.motionOn = true; };
+      if (typeof DeviceMotionEvent.requestPermission === "function") {
+        DeviceMotionEvent.requestPermission().then(function(r){
+          if (r === "granted") add();
+          else setStatus("A mozgásérzékelő nincs engedélyezve: csak GPS-ből számolok, lassabban reagál.", true);
+        }).catch(function(){});
+      } else add();
+    }
+  }
+  function stopSensors(){
+    if (Fu.geoId != null) { try { navigator.geolocation.clearWatch(Fu.geoId); } catch(e) {} Fu.geoId = null; }
+    if (Fu.motionOn) { window.removeEventListener("devicemotion", onMotion); Fu.motionOn = false; }
+    Fu.gpsV = null; Fu.lastFix = null; Fu.gpsA = 0; Fu.hSum = [0,0,0]; Fu.hN = 0; Fu.v = 0; Fu.aLong = 0; Fu.aLongS = 0; Fu.aLat = 0;
+    Fu.lastMotion = 0; Fu.still = 0; Fu.tilt = 0; Fu.bias = 0; Fu.g = null; Fu.gu = null; Fu.teach = null;
+    teachBtn.textContent = "Irány tanítása: nyomd meg, majd gyorsíts egyenesen";
+  }
+
+  /* =================== UI =================== */
+  var chip = $("chip"), statusEl = $("status"), powerBtn = $("power"), thrustBtn = $("thrust"), latchBtn = $("latch"), teachBtn = $("teach");
+  function setStatus(msg, warn){ statusEl.textContent = msg; statusEl.classList.toggle("warn", !!warn); }
+  var chipState = "off";
+  function setChip(k){
+    if (k === chipState) return;
+    chipState = k;
+    chip.textContent = k === "off" ? "Áll" : k === "cruise" ? "Utazó" : "Fut";
+    chip.classList.toggle("on", k !== "off");
+  }
+
+  (function(){
+    var html = "";
+    for (var k=0;k<=120;k+=20){
+      var a = (135 + 270*(k/VMAX)) * Math.PI/180, c = Math.cos(a), s = Math.sin(a);
+      html += '<line class="tick" x1="'+(110+c*72).toFixed(1)+'" y1="'+(110+s*72).toFixed(1)+'" x2="'+(110+c*79).toFixed(1)+'" y2="'+(110+s*79).toFixed(1)+'"/>';
+      html += '<text class="tlabel" text-anchor="middle" dominant-baseline="middle" x="'+(110+c*60).toFixed(1)+'" y="'+(110+s*60).toFixed(1)+'">'+k+'</text>';
+    }
+    $("ticks").innerHTML = html;
+  })();
+
+  // Keep the screen on while the engine runs; the lock is dropped by the browser whenever the page is hidden
+  var wl = null;
+  function wake(){
+    try { if (navigator.wakeLock && !document.hidden) navigator.wakeLock.request("screen").then(function(l){ wl = l; }).catch(function(){}); } catch(e) {}
+  }
+  function unwake(){ try { if (wl) wl.release(); } catch(e) {} wl = null; }
+
+  function setLatch(on){ st.latch = !!on; latchBtn.setAttribute("aria-pressed", st.latch ? "true" : "false"); }
+
+  function start(){
+    var a = initAudio(); if (!a) return;
+    st.running = true;
+    wakeAudio();
+    powerBtn.textContent = "Hajtómű leállítása"; powerBtn.classList.add("stop");
+    setChip("run");
+    wake();
+    if (st.mode === "sensor") startSensors();
+  }
+  function stop(){
+    st.running = false; st.hold = false; thrustBtn.classList.remove("held"); setLatch(false);
+    powerBtn.textContent = "Hajtómű indítása"; powerBtn.classList.remove("stop");
+    setChip("off");
+    unwake();
+    stopSensors();
+    // Let the fade-out finish, then stop burning battery on a silent synth
+    setTimeout(function(){ if (!st.running && A && A.ctx.state === "running") { try { A.ctx.suspend(); } catch(e) {} } }, 1200);
+  }
+  powerBtn.addEventListener("click", function(){ st.running ? stop() : start(); });
+  $("fly").addEventListener("click", function(){ if (!st.running) start(); if (A) st.flyAt = A.ctx.currentTime; });
+
+  function holdOn(e){ if (e) e.preventDefault(); if (!st.running) start(); st.hold = true; thrustBtn.classList.add("held"); }
+  function holdOff(){ st.hold = false; thrustBtn.classList.remove("held"); }
+  thrustBtn.addEventListener("pointerdown", function(e){ try { thrustBtn.setPointerCapture(e.pointerId); } catch(x) {} holdOn(e); });
+  ["pointerup","pointercancel","lostpointercapture"].forEach(function(ev){ thrustBtn.addEventListener(ev, holdOff); });
+  thrustBtn.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+  thrustBtn.addEventListener("keydown", function(e){ if ((e.key === " " || e.key === "Enter") && !e.repeat) holdOn(e); });
+  thrustBtn.addEventListener("keyup", function(e){ if (e.key === " " || e.key === "Enter") holdOff(); });
+
+  // Manual mode: latch the current speed, so the cruise sound can be heard without driving
+  latchBtn.addEventListener("click", function(){
+    if (st.mode !== "manual") return;
+    if (!st.running) start();
+    setLatch(!st.latch);
+  });
+
+  teachBtn.addEventListener("click", function(){
+    if (st.mode !== "sensor" || !st.running || !Fu.motionOn) { setStatus("Előbb válaszd a Szenzor módot és indítsd a hajtóművet.", true); return; }
+    forgetFwd();
+    Fu.teach = { sum:[0,0,0], n:0, until:performance.now() + 4000 };
+    teachBtn.textContent = "Most gyorsíts egyenesen… (4 mp)";
+    setStatus("Tanulom az előre-irányt: gyorsíts egyenesen 4 másodpercig.");
+  });
+
+  document.querySelectorAll('input[name="mode"]').forEach(function(r){
+    r.addEventListener("change", function(){
+      st.mode = r.value;
+      latchBtn.disabled = st.mode !== "manual";
+      if (st.mode === "sensor") { setLatch(false); setStatus("Szenzor mód: indítsd a hajtóművet, majd engedélyezd a helyet."); if (st.running) startSensors(); }
+      else { stopSensors(); setStatus("Kézi mód: nyomd a Tolóerő gombot."); }
+    });
+  });
+  var noteEl = $("presetNote");
+  document.querySelectorAll('input[name="preset"]').forEach(function(r){
+    r.checked = r.value === st.preset;
+    r.addEventListener("change", function(){ st.preset = r.value; noteEl.textContent = NOTES[st.preset]; swapEngine(); save(); });
+  });
+  noteEl.textContent = NOTES[st.preset];
+
+  var volEl = $("vol"), volOut = $("volOut"), sensEl = $("sens"), sensOut = $("sensOut");
+  volEl.value = Math.round(st.vol*100); volOut.textContent = volEl.value + "%";
+  volEl.addEventListener("input", function(){ st.vol = volEl.value/100; volOut.textContent = volEl.value + "%"; save(); });
+  sensEl.value = Math.round(st.sens*100); sensOut.textContent = hu(st.sens,2) + " g";
+  sensEl.addEventListener("input", function(){ st.sens = sensEl.value/100; sensOut.textContent = hu(st.sens,2) + " g"; save(); });
+  var af = $("autofly"); af.checked = st.autoFly;
+  af.addEventListener("change", function(){ st.autoFly = af.checked; save(); });
+
+  /* =================== Loop =================== */
+  var arc = $("arc"), kmhEl = $("kmh"), pctEl = $("pct");
+  var tGps = $("tGps"), tFused = $("tFused"), tLong = $("tLong"), tFwd = $("tFwd");
+  var scope = $("scope"), sctx = scope.getContext("2d"), gball = $("gball"), gctx = gball.getContext("2d"), scopeBuf = null;
+  var css = getComputedStyle(document.documentElement);
+  var C = { ion: css.getPropertyValue("--ion").trim() || "#7CC4FF", heat: css.getPropertyValue("--heat").trim() || "#FF9D57",
+            line: css.getPropertyValue("--line").trim() || "#23303A", muted: css.getPropertyValue("--muted").trim() || "#8497A2" };
+  function sizeCanvas(cv){ var r = window.devicePixelRatio || 1; cv.width = Math.round(cv.clientWidth*r); cv.height = Math.round(cv.clientHeight*r); }
+  function sizeAll(){ sizeCanvas(scope); sizeCanvas(gball); }
+  sizeAll(); window.addEventListener("resize", sizeAll);
+
+  function drawG(lon, lat){
+    var w = gball.width, h = gball.height, r = Math.min(w,h)/2 - 4*(window.devicePixelRatio||1), cx = w/2, cy = h/2, dpr = window.devicePixelRatio || 1;
+    gctx.clearRect(0,0,w,h);
+    gctx.strokeStyle = C.line; gctx.lineWidth = dpr;
+    [0.25, 0.5].forEach(function(gv){ gctx.beginPath(); gctx.arc(cx, cy, r*gv/0.6, 0, Math.PI*2); gctx.stroke(); });
+    gctx.beginPath(); gctx.moveTo(cx-r, cy); gctx.lineTo(cx+r, cy); gctx.moveTo(cx, cy-r); gctx.lineTo(cx, cy+r); gctx.stroke();
+    gctx.fillStyle = C.muted; gctx.font = (10*dpr) + "px 'Saira Condensed', sans-serif"; gctx.textAlign = "left";
+    gctx.fillText("0,25", cx + 3*dpr, cy - r*0.25/0.6 + 10*dpr);
+    gctx.fillText("0,5 g", cx + 3*dpr, cy - r*0.5/0.6 + 10*dpr);
+    gctx.textAlign = "center"; gctx.fillText("ELŐRE", cx, 9*dpr);
+    var x = cx + clamp(lat/(0.6*G0), -1, 1)*r, y = cy - clamp(lon/(0.6*G0), -1, 1)*r;
+    gctx.fillStyle = lon >= 0 ? C.ion : C.heat;
+    gctx.beginPath(); gctx.arc(x, y, 6*dpr, 0, Math.PI*2); gctx.fill();
+  }
+
+  // Leaving the page: sensors and animation frames stop, so go silent instead of droning on a frozen state
+  document.addEventListener("visibilitychange", function(){
+    if (document.hidden) {
+      holdOff();
+      if (A) A.master.gain.setTargetAtTime(0, A.ctx.currentTime, 0.05);
+    } else {
+      lastT = performance.now();
+      if (st.running) { wake(); wakeAudio(); }
+    }
+  });
+  // A phone call or another app can interrupt audio; the next touch brings it back
+  document.addEventListener("pointerdown", wakeAudio, true);
+
+  var lastT = performance.now(), frame = 0;
+  function tick(now){
+    var dt = clamp((now - lastT)/1000, 0, 0.05); lastT = now;
+    var fullA = st.sens*G0, sT, tT, bT, cT, kmh;
+    var sensorOn = st.mode === "sensor" && st.running, imu = imuAlive();
+    if (sensorOn && !imu) fuse(dt, null);   // GPS-only fallback keeps speed and thrust alive without a G-sensor
+    var live = sensorOn && (gpsFresh() || imu);
+    if (live) {
+      kmh = Fu.v*3.6;
+      sT = clamp(kmh/VMAX);
+      // Small dead band against road vibration, then a curve that keeps gentle throttle audible
+      var a = Fu.aLongS, dead = 0.02*G0, ae = Math.abs(a) > dead ? a - (a > 0 ? dead : -dead) : 0;
+      tT = Math.max(st.hold ? 1 : 0, Math.pow(clamp(ae/fullA), 0.7));
+      bT = Math.pow(clamp(-ae/fullA), 0.7);
+      // Cruise: moving, and neither speeding up nor slowing down (a light version also at standstill = idle)
+      cT = st.hold ? 0 : (1 - smooth((Math.abs(a)/G0 - 0.035)/0.06)) * (0.3 + 0.7*smooth((kmh - 6)/14));
+      if (st.autoFly && a > 0.75*fullA && now - st.lastAutoFly > 10000 && A && st.flyAt < 0) { st.flyAt = A.ctx.currentTime; st.lastAutoFly = now; }
+    } else {
+      if (st.running) { var acc = st.hold ? 0.32*(1 - st.simS*0.85) : (st.latch ? 0 : -0.09); st.simS = clamp(st.simS + acc*dt); }
+      else st.simS = Math.max(0, st.simS - 0.3*dt);
+      var coast = st.running && !st.hold && !st.latch && st.simS > 0.02;
+      sT = st.simS; tT = st.hold ? 1 : 0; bT = coast ? 0.3 : 0;
+      cT = (!st.running || coast) ? 0 : st.hold ? (st.simS > 0.985 ? 1 : 0) : 0.3 + 0.7*smooth(st.simS/0.12);
+      kmh = null;
+    }
+    st.t += (tT - st.t) * (1 - Math.exp(-dt*(tT > st.t ? 7 : 2.5)));
+    st.s += (sT - st.s) * (1 - Math.exp(-dt*3));
+    st.b += (bT - st.b) * (1 - Math.exp(-dt*4));
+    st.c += (cT - st.c) * (1 - Math.exp(-dt/(cT > st.c ? 0.6 : 0.2)));
+    if (kmh == null) kmh = st.s*VMAX;
+
+    if (A) {
+      var fy = flyShape();
+      A.engine.update({ s:st.s, t:st.t, b:st.b, c:st.c, pitch:fy.pitch, boost:fy.boost }, dt);
+      if (A.pan) A.pan.pan.setTargetAtTime(fy.pan, A.ctx.currentTime, 0.05);
+      A.master.gain.setTargetAtTime(st.running ? st.vol*0.9 : 0, A.ctx.currentTime, st.running ? 0.15 : 0.35);
+    }
+
+    arc.setAttribute("stroke-dasharray", (424.12*clamp(Math.max(st.t, 0.004))).toFixed(1) + " 565.49");
+    arc.style.stroke = "color-mix(in oklab, var(--heat) " + Math.round(st.t*100) + "%, var(--ion))";
+    kmhEl.textContent = Math.round(kmh);
+    pctEl.textContent = Math.round(st.t*100);
+
+    var w = scope.width, h = scope.height;
+    sctx.clearRect(0,0,w,h);
+    sctx.lineWidth = Math.max(1.5, (window.devicePixelRatio||1)*1.2);
+    sctx.strokeStyle = C.ion;
+    sctx.beginPath();
+    if (A && st.running) {
+      sctx.globalAlpha = 0.9;
+      if (!scopeBuf) scopeBuf = new Float32Array(A.analyser.fftSize);
+      A.analyser.getFloatTimeDomainData(scopeBuf);
+      for (var i=0;i<scopeBuf.length;i++){
+        var x = i/(scopeBuf.length-1)*w, y = h/2 - clamp(scopeBuf[i]*1.6, -1, 1)*h*0.42;
+        if (i) sctx.lineTo(x,y); else sctx.moveTo(x,y);
+      }
+    } else { sctx.globalAlpha = 0.35; sctx.moveTo(0,h/2); sctx.lineTo(w,h/2); }
+    sctx.stroke();
+
+    if ((frame++ % 6) === 0) {
+      setChip(!st.running ? "off" : (st.c > 0.6 && st.s > 0.05) ? "cruise" : "run");
+      tGps.textContent = sensorOn && gpsFresh() ? Math.round(Fu.gpsV*3.6) + " km/h" : "—";
+      tFused.textContent = sensorOn && live ? Math.round(Fu.v*3.6) + " km/h" : "—";
+      tLong.textContent = sensorOn && live ? (Fu.aLongS >= 0 ? "+" : "−") + hu(Math.abs(Fu.aLongS/G0), 2) + " g" : "—";
+      tFwd.textContent = Math.round(conf()*100) + "%";
+      drawG(sensorOn ? Fu.aLongS : 0, sensorOn ? Fu.aLat : 0);
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
